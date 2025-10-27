@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>RPG-Estindo</title>
+<style>
+body { margin:0; background:#111; color:white; font-family:monospace; overflow:hidden;}
+#ui {
+  position:absolute; top:5px; left:5px; background:rgba(0,0,0,0.6); padding:10px; border-radius:6px;
+}
+button { margin:3px; padding:6px 10px; border:none; border-radius:5px; cursor:pointer;}
+#log { max-height:150px; overflow-y:auto; background:rgba(0,0,0,0.5); padding:5px; margin-top:5px; }
+canvas { display:block; }
+</style>
+</head>
+<body>
+<div id="ui">
+<h2 id="status">RPG-Estindo</h2>
+<button onclick="explorar()">⚔️ Explorar</button>
+<button onclick="ferreiro()">🔨 Ferreiro</button>
+<button onclick="renascer()">🌟 Renascer</button>
+<pre id="log"></pre>
+</div>
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+<script>
+// ================== GAME SETUP ==================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const TILE = 32;
+
+// ---------------- Player ----------------
+let player = {
+  nome:"Heroi",
+  x:100, y:300,
+  width:28, height:28,
+  color:"#00ff00",
+  vx:0, vy:0,
+  speed:2, jump:6,
+  grounded:false,
+  lvl:1,
+  lvlMax:1000,
+  rebirths:0,
+  exp:0,
+  max_hp:100,
+  hp:100,
+  atk:10,
+  gold:0,
+  inventario:[{nome:"Lágrima de Dragão",tipo:"material",raridade:"Lendário"}],
+  bioma:"Floresta"
+};
+
+// ---------------- Enemies ----------------
+class Enemy {
+  constructor(x,y,color,hp,atk,bioma){
+    this.x=x; this.y=y; this.width=28; this.height=28; this.color=color;
+    this.hp=hp; this.atk=atk; this.bioma=bioma;
+    this.vx=1;
+  }
+  update(){
+    this.x += this.vx;
+    if(this.x<0||this.x>canvas.width-30) this.vx*=-1;
+  }
+  draw(){ ctx.fillStyle=this.color; ctx.fillRect(this.x,this.y,this.width,this.height);}
+}
+let enemies = [
+  new Enemy(400,300,"#ff0000",50,10,"Floresta"),
+  new Enemy(600,300,"#ffff00",80,15,"Deserto")
+];
+
+// ---------------- Items ----------------
+const baus = [
+  {nome:"Poção de Vida",tipo:"consumível",cura:30,raridade:"Comum"},
+  {nome:"Espada Curta",tipo:"arma",atk:7,raridade:"Incomum"},
+  {nome:"Armadura de Ferro",tipo:"armadura",defesa:12,raridade:"Raro"},
+  {nome:"Amuleto da Sabedoria",tipo:"acessório",hp_bonus:50,raridade:"Épico"},
+  {nome:"Excalibur",tipo:"arma",atk:50,raridade:"Lendário"}
+];
+
+// ================== FUNÇÕES ==================
+function atualizarStatus(){
+  document.getElementById("status").innerText=
+  `${player.nome} Lvl:${player.lvl}/${player.lvlMax} HP:${player.hp} ATK:${player.atk} 🌟Rebirth:${player.rebirths} Gold:${player.gold}`;
+}
+function log(txt){
+  let l = document.getElementById("log");
+  l.innerText += txt+"\n";
+  l.scrollTop = l.scrollHeight;
+}
+
+// ---------------- Movimentos ----------------
+let keys = {};
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+function movePlayer(){
+  if(keys["ArrowLeft"]) player.x-=player.speed;
+  if(keys["ArrowRight"]) player.x+=player.speed;
+  if(keys["ArrowUp"] && player.grounded){ player.vy=-player.jump; player.grounded=false;}
+  player.vy +=0.3; // gravity
+  player.y += player.vy;
+  if(player.y>300){ player.y=300; player.vy=0; player.grounded=true;}
+}
+
+// ---------------- Explorar ----------------
+function explorar(){
+  if(Math.random()<0.3){abrirBau(); return;}
+  let e = enemies[Math.floor(Math.random()*enemies.length)];
+  if(e.bioma===player.bioma){
+    batalha(e);
+  } else log("⚠️ Nenhum inimigo no bioma atual.");
+}
+
+// ---------------- Batalha ----------------
+function batalha(enemy){
+  log(`🔥 ${enemy.bioma} - ${enemy.color} inimigo apareceu!`);
+  while(player.hp>0 && enemy.hp>0){
+    let acao = prompt(`${player.nome} HP:${player.hp} | ${enemy.hp} HP do inimigo\n1.Atacar 2.Curar`);
+    if(acao==="1"){ 
+      let dano = Math.floor(Math.random()*(player.atk-2))+2;
+      enemy.hp -= dano; log(`⚔️ Você causou ${dano} de dano!`);
+    }
+    else if(acao==="2"){ 
+      let cura = Math.floor(Math.random()*(20)+10);
+      player.hp=Math.min(player.max_hp,player.hp+cura);
+      log(`🍷 Você curou ${cura} HP!`);
+    }
+    if(enemy.hp>0){
+      let dano = Math.floor(Math.random()*(enemy.atk-2))+2;
+      player.hp -= dano; log(`💢 Inimigo causou ${dano} de dano!`);
+    }
+  }
+  if(player.hp>0){
+    log(`✅ Inimigo derrotado!`);
+    player.gold += Math.floor(Math.random()*50)+10;
+    player.exp += 50;
+    if(player.exp>=player.lvl*10){player.exp=0; player.lvl++; log(`⭐ Você subiu para lvl ${player.lvl}!`);}
+  } else { log("💀 Você morreu, revive com 50% HP!"); player.hp = Math.floor(player.max_hp/2);}
+  atualizarStatus();
+}
+
+// ---------------- Ferreiro ----------------
+function ferreiro(){
+  if(player.gold<100){log("💰 Ouro insuficiente!"); return;}
+  player.gold -= 100;
+  player.atk +=5; player.max_hp +=20; player.hp=player.max_hp;
+  log("🔨 Ferreiro: +5 ATK e +20 HP!");
+  atualizarStatus();
+}
+
+// ---------------- Baú ----------------
+function abrirBau(){
+  let item = baus[Math.floor(Math.random()*baus.length)];
+  player.inventario.push(item);
+  log(`📦 Você encontrou: ${item.nome} (${item.raridade})`);
+}
+
+// ---------------- Renascimento ----------------
+function renascer(){
+  if(player.lvl < player.lvlMax){ log(`⚠️ Precisa atingir lvl ${player.lvlMax}!`); return;}
+  let index = player.inventario.findIndex(i=>i.nome==="Lágrima de Dragão");
+  if(index===-1){ log("💧 Precisa da Lágrima de Dragão!"); return;}
+  player.inventario.splice(index,1);
+  player.rebirths +=1;
+  player.lvlMax += 1000;
+  player.lvl = 1;
+  player.hp = player.max_hp + 50*player.rebirths;
+  player.max_hp += 50*player.rebirths;
+  player.atk += 5*player.rebirths;
+  log(`🌟 RENASCIMENTO #${player.rebirths}! Novo teto: ${player.lvlMax}`);
+  atualizarStatus();
+}
+
+// ================== GAME LOOP ==================
+function update(){
+  movePlayer();
+  enemies.forEach(e=>e.update());
+}
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=player.color;
+  ctx.fillRect(player.x,player.y,player.width,player.height);
+  enemies.forEach(e=>e.draw());
+}
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+atualizarStatus();
+</script>
+</body>
+</html>
